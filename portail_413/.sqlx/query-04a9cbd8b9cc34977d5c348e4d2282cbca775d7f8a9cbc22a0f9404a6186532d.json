@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \n                COALESCE(organization, 'Non spécifiée') as organization,\n                COUNT(DISTINCT v.id) as visitor_count\n            FROM visitors v\n            GROUP BY COALESCE(organization, 'Non spécifiée')\n            ORDER BY COUNT(DISTINCT v.id) DESC\n            LIMIT 10",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "organization",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "visitor_count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "04a9cbd8b9cc34977d5c348e4d2282cbca775d7f8a9cbc22a0f9404a6186532d"
+}

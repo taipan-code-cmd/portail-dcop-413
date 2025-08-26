@@ -1,0 +1,21 @@
+{
+  "db": "PostgreSQL",
+  "queries": {
+    "dummy_query": {
+      "query": "SELECT 1 as test",
+      "describe": {
+        "columns": [
+          {
+            "ordinal": 0,
+            "name": "test",
+            "type_info": "Int4"
+          }
+        ],
+        "parameters": {
+          "Left": []
+        },
+        "nullable": [false]
+      }
+    }
+  }
+}

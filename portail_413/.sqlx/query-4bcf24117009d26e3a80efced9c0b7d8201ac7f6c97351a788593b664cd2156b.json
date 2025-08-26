@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \n                DATE_TRUNC('week', created_at) as week,\n                COUNT(*) as count\n            FROM visits \n            WHERE created_at >= NOW() - INTERVAL '12 weeks'\n            GROUP BY DATE_TRUNC('week', created_at)\n            ORDER BY DATE_TRUNC('week', created_at)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "week",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 1,
+        "name": "count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "4bcf24117009d26e3a80efced9c0b7d8201ac7f6c97351a788593b664cd2156b"
+}

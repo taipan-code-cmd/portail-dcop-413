@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT \n                COALESCE(department, 'Non spécifié') as department,\n                COUNT(*) as count\n            FROM visits \n            WHERE created_at >= $1 AND created_at <= $2\n            GROUP BY COALESCE(department, 'Non spécifié')\n            ORDER BY COUNT(*) DESC\n            LIMIT 10",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "department",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "cbc4b8b033abefc0ae6783c5686d451ec16a52af7afb1208ad496a1cbdbef3a0"
+}

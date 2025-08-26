@@ -1,0 +1,19 @@
+{
+  "dashboard": {
+    "title": "DCOP (413) - System Monitor",
+    "panels": [
+      {
+        "title": "Active Visits",
+        "type": "stat"
+      },
+      {
+        "title": "Database Connections",
+        "type": "graph"
+      },
+      {
+        "title": "HTTP Requests",
+        "type": "graph"
+      }
+    ]
+  }
+}

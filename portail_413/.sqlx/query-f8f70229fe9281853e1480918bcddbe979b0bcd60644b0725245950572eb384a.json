@@ -1,0 +1,95 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT id, first_name_encrypted, last_name_encrypted, email_encrypted,\n                   phone1_encrypted, phone2_encrypted, phone3_encrypted, phone4_encrypted,\n                   organization, photo_data, created_at, updated_at, integrity_hash\n            FROM visitors \n            ORDER BY created_at DESC\n            LIMIT $1 OFFSET $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "first_name_encrypted",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "last_name_encrypted",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "email_encrypted",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "phone1_encrypted",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "phone2_encrypted",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "phone3_encrypted",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "phone4_encrypted",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "organization",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "photo_data",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 11,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "integrity_hash",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f8f70229fe9281853e1480918bcddbe979b0bcd60644b0725245950572eb384a"
+}

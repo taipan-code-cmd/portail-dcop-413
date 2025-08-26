@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE visits \n            SET status = $2, notes = $3, approved_by = $4, approved_at = $5, \n                updated_at = $6, integrity_hash = $7\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "visit_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "approved",
+                "rejected",
+                "inprogress",
+                "completed",
+                "cancelled"
+              ]
+            }
+          }
+        },
+        "Text",
+        "Uuid",
+        "Timestamptz",
+        "Timestamptz",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fc78dbffc28d654bd6e8520659409f1c5bd5dec4164b94333403c7cc05cd05aa"
+}

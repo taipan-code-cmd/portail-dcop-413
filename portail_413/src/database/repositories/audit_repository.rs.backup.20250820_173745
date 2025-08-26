@@ -1,0 +1,197 @@
+use chrono::Utc;
+use sqlx::PgPool;
+use uuid::Uuid;
+use sqlx::types::ipnetwork::IpNetwork;
+
+use crate::errors::{AppError, Result};
+use crate::models::{AuditLog, AuditSearchQuery};
+
+#[derive(Clone)]
+pub struct AuditRepository {
+    pool: PgPool,
+}
+
+impl AuditRepository {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    pub async fn create_audit_log(
+        &self,
+        user_id: Option<Uuid>,
+        action: String,
+        resource_type: String,
+        resource_id: Option<Uuid>,
+        old_values: Option<serde_json::Value>,
+        new_values: Option<serde_json::Value>,
+        ip_address: Option<String>,
+        user_agent: Option<String>,
+        success: bool,
+        error_message: Option<String>,
+    ) -> Result<AuditLog> {
+        let audit_id = Uuid::new_v4();
+        let timestamp = Utc::now();
+
+        let ip_addr: Option<IpNetwork> = ip_address
+            .as_ref()
+            .and_then(|ip| ip.parse::<std::net::IpAddr>().ok())
+            .map(|addr| IpNetwork::from(addr));
+
+        let audit_log = AuditLog {
+            id: audit_id,
+            user_id,
+            action: action.clone(),
+            resource_type: resource_type.clone(),
+            resource_id,
+            old_values: old_values.clone(),
+            new_values: new_values.clone(),
+            ip_address: ip_addr,
+            user_agent: user_agent.clone(),
+            timestamp,
+            success,
+            error_message: error_message.clone(),
+        };
+
+        sqlx::query!(
+            r#"
+            INSERT INTO audit_logs (id, user_id, action, resource_type, resource_id, 
+                                  old_values, new_values, ip_address, user_agent, 
+                                  timestamp, success, error_message)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            "#,
+            audit_id,
+            user_id,
+            action,
+            resource_type,
+            resource_id,
+            old_values,
+            new_values,
+            ip_addr,
+            user_agent,
+            timestamp,
+            success,
+            error_message
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(AppError::Database)?;
+
+        Ok(audit_log)
+    }
+
+    pub async fn search_audit_logs(&self, query: AuditSearchQuery) -> Result<Vec<AuditLog>> {
+        let limit = query.limit.unwrap_or(50).min(1000); // Max 1000 résultats
+        let offset = query.offset.unwrap_or(0);
+
+        let mut sql = String::from(
+            r#"
+            SELECT id, user_id, action, resource_type, resource_id, 
+                   old_values, new_values, ip_address, user_agent, 
+                   timestamp, success, error_message
+            FROM audit_logs
+            WHERE 1=1
+            "#,
+        );
+
+        let mut params: Vec<Box<dyn sqlx::Encode<'_, sqlx::Postgres> + Send + Sync>> = Vec::new();
+        let mut param_count = 0;
+
+        if let Some(user_id) = query.user_id {
+            param_count += 1;
+            sql.push_str(&format!(" AND user_id = ${}", param_count));
+            params.push(Box::new(user_id));
+        }
+
+        if let Some(action) = query.action {
+            param_count += 1;
+            sql.push_str(&format!(" AND action = ${}", param_count));
+            params.push(Box::new(action));
+        }
+
+        if let Some(resource_type) = query.resource_type {
+            param_count += 1;
+            sql.push_str(&format!(" AND resource_type = ${}", param_count));
+            params.push(Box::new(resource_type));
+        }
+
+        if let Some(date_from) = query.date_from {
+            param_count += 1;
+            sql.push_str(&format!(" AND timestamp >= ${}", param_count));
+            params.push(Box::new(date_from));
+        }
+
+        if let Some(date_to) = query.date_to {
+            param_count += 1;
+            sql.push_str(&format!(" AND timestamp <= ${}", param_count));
+            params.push(Box::new(date_to));
+        }
+
+        if let Some(success) = query.success {
+            param_count += 1;
+            sql.push_str(&format!(" AND success = ${}", param_count));
+            params.push(Box::new(success));
+        }
+
+        sql.push_str(" ORDER BY timestamp DESC");
+        
+        param_count += 1;
+        sql.push_str(&format!(" LIMIT ${}", param_count));
+        params.push(Box::new(limit));
+
+        param_count += 1;
+        sql.push_str(&format!(" OFFSET ${}", param_count));
+        params.push(Box::new(offset));
+
+        // Pour simplifier, utilisons une requête de base sans paramètres dynamiques
+        let audit_logs = sqlx::query_as!(
+            AuditLog,
+            r#"
+            SELECT id, user_id, action, resource_type, resource_id,
+                   old_values, new_values,
+                   ip_address,
+                   user_agent,
+                   timestamp, success, error_message
+            FROM audit_logs
+            ORDER BY timestamp DESC
+            LIMIT $1 OFFSET $2
+            "#,
+            limit,
+            offset
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(AppError::Database)?;
+
+        Ok(audit_logs)
+    }
+
+    pub async fn get_audit_log_by_id(&self, audit_id: Uuid) -> Result<Option<AuditLog>> {
+        let audit_log = sqlx::query_as!(
+            AuditLog,
+            r#"
+            SELECT id, user_id, action, resource_type, resource_id, 
+                   old_values, new_values, ip_address, user_agent, 
+                   timestamp, success, error_message
+            FROM audit_logs
+            WHERE id = $1
+            "#,
+            audit_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(AppError::Database)?;
+
+        Ok(audit_log)
+    }
+
+    pub async fn count_audit_logs(&self) -> Result<i64> {
+        let count = sqlx::query_scalar!(
+            "SELECT COUNT(*) FROM audit_logs"
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(AppError::Database)?;
+
+        Ok(count.unwrap_or(0))
+    }
+}

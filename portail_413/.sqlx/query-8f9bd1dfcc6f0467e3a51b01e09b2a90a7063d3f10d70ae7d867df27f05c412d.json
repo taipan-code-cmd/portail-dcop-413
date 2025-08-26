@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE visitors \n            SET first_name_encrypted = $2, last_name_encrypted = $3, email_encrypted = $4,\n                phone1_encrypted = $5, phone2_encrypted = $6, phone3_encrypted = $7, phone4_encrypted = $8,\n                organization = $9, photo_data = $10, updated_at = $11, integrity_hash = $12\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Varchar",
+        "Text",
+        "Timestamptz",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8f9bd1dfcc6f0467e3a51b01e09b2a90a7063d3f10d70ae7d867df27f05c412d"
+}

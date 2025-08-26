@@ -1,0 +1,430 @@
+# DCOP (413) - Configuration NGINX Ultra-Sécurisée
+# Proxy reverse avec protection DDoS, SSL/TLS renforcé et sécurité maximale
+# Conçu pour applications critiques gouvernementales
+
+user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log warn;
+pid /var/run/nginx.pid;
+
+# Optimisations de performance et sécurité
+worker_rlimit_nofile 65535;
+worker_rlimit_core 0;  # Désactiver les core dumps
+
+events {
+    worker_connections 4096;
+    use epoll;
+    multi_accept on;
+    accept_mutex off;
+}
+
+http {
+    # ============================================================================
+    # CONFIGURATION DE BASE SÉCURISÉE
+    # ============================================================================
+
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    # Sécurité - Masquer les informations serveur
+    server_tokens off;
+
+    # Optimisations de performance
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 30;
+    keepalive_requests 1000;
+    types_hash_max_size 2048;
+    client_max_body_size 10M;
+
+    # Timeouts sécurisés
+    client_body_timeout 12;
+    client_header_timeout 12;
+    send_timeout 10;
+
+    # ============================================================================
+    # PROTECTION DDOS ET LIMITATION DE DÉBIT RENFORCÉE
+    # ============================================================================
+
+    # Zones de limitation par IP avec algorithme adaptatif
+    limit_req_zone $binary_remote_addr zone=login:10m rate=3r/m;      # Connexion: 3/min (plus strict)
+    limit_req_zone $binary_remote_addr zone=api_auth:10m rate=10r/m;  # Auth endpoints: 10/min
+    limit_req_zone $binary_remote_addr zone=api_data:10m rate=20r/m;  # Data endpoints: 20/min
+    limit_req_zone $binary_remote_addr zone=general:10m rate=30r/m;   # Général: 30/min (réduit)
+
+    # Limitation par endpoint spécifique (rate adaptatif)
+    limit_req_zone $binary_remote_addr zone=admin:10m rate=5r/m;      # Admin: très strict
+    limit_req_zone $binary_remote_addr zone=register:10m rate=1r/m;   # Inscription: 1/min
+
+    # Limitation des connexions simultanées (burst protection)
+    limit_conn_zone $binary_remote_addr zone=conn_limit_per_ip:10m;
+    
+    # Limitation globale pour éviter l'épuisement de ressources
+    limit_req_zone $server_name zone=global:10m rate=100r/s;
+
+    # Protection contre les requêtes lentes (buffers ajustés pour éviter les fichiers temporaires)
+    client_body_buffer_size 16k;
+    client_header_buffer_size 4k;
+    large_client_header_buffers 4 8k;
+
+
+    # ============================================================================
+    # LOGGING SÉCURISÉ
+    # ============================================================================
+
+    # Format de log sécurisé avec informations de sécurité
+    log_format security '$remote_addr - $remote_user [$time_local] '
+                       '"$request" $status $body_bytes_sent '
+                       '"$http_referer" "$http_user_agent" '
+                       '"$http_x_forwarded_for" "$http_x_real_ip" '
+                       'rt=$request_time uct="$upstream_connect_time" '
+                       'uht="$upstream_header_time" urt="$upstream_response_time"';
+
+    access_log /var/log/nginx/access.log security;
+    error_log /var/log/nginx/error.log warn;
+
+    # Log des tentatives d'intrusion
+    log_format intrusion '$remote_addr - [$time_local] "$request" '
+                        '$status "$http_user_agent" "$request_body"';
+
+    # ============================================================================
+    # COMPRESSION SÉCURISÉE
+    # ============================================================================
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_comp_level 6;
+    gzip_types
+        text/plain
+        text/css
+        text/xml
+        text/javascript
+        application/javascript
+        application/xml+rss
+        application/json
+        application/xml
+        image/svg+xml;
+
+    # Protection contre BREACH
+    gzip_proxied no-cache no-store private expired auth;
+
+    # ============================================================================
+    # CONFIGURATION SSL/TLS ULTRA-SÉCURISÉE
+    # ============================================================================
+
+    # Protocoles TLS modernes (TLS 1.2 et 1.3)
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    # Suites de chiffrement sécurisées (compatibles TLS 1.2/1.3)
+    ssl_ciphers ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256;
+    ssl_prefer_server_ciphers off;
+
+    # Configuration SSL avancée
+    ssl_session_cache shared:SSL:50m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # OCSP Stapling pour validation des certificats (désactivé pour certificats auto-signés)
+    # ssl_stapling on;
+    # ssl_stapling_verify on;
+    # resolver 8.8.8.8 8.8.4.4 valid=300s;
+    # resolver_timeout 5s;
+
+    # ============================================================================
+    # CONFIGURATION UPSTREAM SÉCURISÉE - ACCÈS INTERNE UNIQUEMENT
+    # ============================================================================
+
+    upstream dcop_backend {
+        # Application accessible UNIQUEMENT depuis le réseau backend
+    # IP fixe du conteneur dans le réseau backend (172.25.2.20)
+    server 172.25.2.20:8443;
+        keepalive 32;
+        keepalive_requests 1000;
+        keepalive_timeout 60s;
+        
+        # Configuration de santé pour haute disponibilité
+        # backup server en cas de besoin futur
+        # server 172.25.2.21:8443 backup;
+    }
+
+
+    # ============================================================================
+    # SERVEURS DE SÉCURITÉ
+    # ============================================================================
+
+    # Serveur principal HTTP (port 8080) — tout passe par ce proxy
+    # DCOP (413) - Serveur principal 
+    server {
+        listen 8080;
+        listen [::]:8080;
+        server_name localhost _;
+
+        # ========================================================================
+        # EN-TÊTES DE SÉCURITÉ ULTRA-RENFORCÉS
+        # ========================================================================
+
+    # Protection contre le clickjacking
+        add_header X-Frame-Options "DENY" always;
+
+        # Protection contre le MIME sniffing
+        add_header X-Content-Type-Options "nosniff" always;
+
+        # Protection XSS
+        add_header X-XSS-Protection "1; mode=block" always;
+
+        # Politique de référent stricte
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+        # CSP renforcée pour API avec sécurité maximale
+        add_header Content-Security-Policy "default-src 'none'; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; script-src 'none'; style-src 'none';" always;
+
+        # Protection contre les attaques de permissions (étendue)
+        add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), speaker=(), vibrate=(), fullscreen=(), accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), clipboard-read=(), clipboard-write=(), display-capture=(), document-domain=(), encrypted-media=(), execution-while-not-rendered=(), execution-while-out-of-viewport=(), gamepad=(), midi=(), navigation-override=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), sync-xhr=(), xr-spatial-tracking=()" always;
+
+        # HSTS renforcé (2 ans avec subdomains et preload)
+        add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+        
+        # Header personnalisé DCOP pour identification et traçabilité
+        add_header X-DCOP-Proxy "nginx-dcop-413" always;
+        add_header X-Security-Level "MAXIMUM" always;
+        
+        # Cache control sécurisé pour développement
+        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate" always;
+        add_header Pragma "no-cache" always;
+        add_header Expires "0" always;
+
+
+        # ========================================================================
+        # LIMITATION DE DÉBIT PAR ENDPOINT AVEC SÉCURITÉ ADAPTATIVE
+        # ========================================================================
+
+        # Login endpoint - Très strict
+        location /api/auth/login {
+            limit_req zone=login burst=2 nodelay;
+            limit_conn conn_limit_per_ip 3;
+            
+            # Protection supplémentaire contre bruteforce
+            limit_req_status 429;
+            limit_conn_status 429;
+            
+            proxy_pass http://dcop_backend;
+            include /etc/nginx/proxy-security-headers.conf;
+        }
+
+        # Registration endpoint - Ultra strict
+        location /api/auth/register {
+            limit_req zone=register burst=1 nodelay;
+            limit_conn conn_limit_per_ip 2;
+            
+            proxy_pass http://dcop_backend;
+            include /etc/nginx/proxy-security-headers.conf;
+        }
+
+        # Admin endpoints - Sécurité maximale
+        location /api/admin/ {
+            limit_req zone=admin burst=3 nodelay;
+            limit_conn conn_limit_per_ip 5;
+            
+            # Log spécial pour les accès admin
+            access_log /var/log/nginx/admin_access.log security;
+            
+            proxy_pass http://dcop_backend;
+            include /etc/nginx/proxy-security-headers.conf;
+        }
+
+        # API endpoints généraux - Limitation modérée
+        location /api/ {
+            limit_req zone=api_data burst=8 nodelay;
+            limit_conn conn_limit_per_ip 10;
+
+            proxy_pass http://dcop_backend;
+            include /etc/nginx/proxy-security-headers.conf;
+        }
+
+            # En-têtes de proxy sécurisés - VALIDATION STRICTE REQUISE PAR L'APPLICATION
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Forwarded-Host $server_name;
+            proxy_set_header X-Forwarded-Port $server_port;
+            proxy_set_header X-Forwarded-Ssl on;
+            
+            # 🔒 EN-TÊTE PERSONNALISÉ OBLIGATOIRE POUR VALIDATION SÉCURISÉE
+            proxy_set_header X-DCOP-Proxy "nginx-dcop-413";
+            proxy_set_header X-Proxy-Server "DCOP-Nginx-Secure";
+            proxy_set_header X-Proxy-IP "172.25.2.2";
+            proxy_set_header X-Security-Level "maximum";
+            proxy_set_header X-Proxy-Timestamp $time_iso8601;
+
+            # Sécurité proxy
+            proxy_redirect off;
+            proxy_buffering on;
+            proxy_buffer_size 4k;
+            proxy_buffers 8 4k;
+            proxy_busy_buffers_size 28k;
+        }
+
+        # ========================================================================
+        # FRONTEND STATIQUE ET API ENDPOINTS
+        # ========================================================================
+
+        # Servir les fichiers statiques du frontend
+        location / {
+            limit_req zone=general burst=10 nodelay;
+            limit_conn conn_limit_per_ip 5;
+            
+            root /var/www/html;
+            index index.html;
+            try_files $uri $uri/ /index.html;
+            
+            # Cache pour les assets statiques
+            location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+                expires 1y;
+                add_header Cache-Control "public, immutable";
+            }
+        }
+
+        # Page d'accueil API pour confirmer que le service fonctionne
+        location = /api-info {
+            limit_req zone=general burst=10 nodelay;
+            limit_conn conn_limit_per_ip 5;
+            
+            return 200 'DCOP (413) - Service API Actif\nAuthentification requise pour accéder aux endpoints.\n';
+            add_header Content-Type text/plain;
+        }
+
+    # Documentation API simple
+    location = /api-info {
+            limit_req zone=general burst=5 nodelay;
+            limit_conn conn_limit_per_ip 3;
+            
+            return 200 'DCOP (413) - API Endpoints:\n/api/auth/login\n/api/auth/logout\n/api/dashboard\n/api/visitors\n/api/visits\n/health\n';
+            add_header Content-Type text/plain;
+        }
+
+
+        # ========================================================================
+        # ENDPOINTS SPÉCIALISÉS SÉCURISÉS
+        # ========================================================================
+
+        # Health check - Accès restreint avec en-têtes proxy obligatoires
+        location = /health {
+            # Restriction par IP (à adapter selon vos besoins)
+            allow 127.0.0.1;
+            allow 172.25.0.0/16;
+            deny all;
+
+            proxy_pass http://dcop_backend/health;
+            access_log off;
+
+            # 🔒 EN-TÊTES PROXY OBLIGATOIRES POUR HEALTH CHECK
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-DCOP-Proxy "nginx-dcop-413";
+            proxy_set_header X-Proxy-Server "DCOP-Nginx-Secure";
+
+            # Timeouts courts pour health check
+            proxy_connect_timeout 5s;
+            proxy_send_timeout 5s;
+            proxy_read_timeout 5s;
+        }
+        
+        # Health check interne pour Docker healthcheck
+        location = /internal/health {
+            access_log off;
+            allow 127.0.0.1;
+            allow 172.25.0.0/16;
+            deny all;
+            
+            return 200 '{"status":"ok","service":"dcop-proxy","timestamp":"$time_iso8601"}';
+            add_header Content-Type application/json;
+        }
+
+        # Redirect vers documentation API pour les anciennes routes statiques
+        location ~* \.(png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|js|css|wasm)$ {
+            return 410 'Frontend supprimé. Utilisez les endpoints API.';
+            add_header Content-Type text/plain;
+        }
+
+        # ========================================================================
+        # PROTECTION CONTRE LES ATTAQUES
+        # ========================================================================
+
+        # Bloquer les fichiers sensibles et cachés
+        location ~ /\. {
+            deny all;
+            return 444;
+        }
+
+        # Bloquer les extensions dangereuses
+        location ~* \.(env|config|ini|log|bak|sql|dump|backup|old|tmp|swp|swo)$ {
+            deny all;
+            return 444;
+        }
+
+        # Bloquer les tentatives d'exploitation
+        location ~* (eval\(|base64_decode|gzinflate|shell_exec|system\(|exec\() {
+            deny all;
+            return 444;
+        }
+
+        # Bloquer les user agents suspects
+        if ($http_user_agent ~* (nmap|nikto|wikto|sf|sqlmap|bsqlbf|w3af|acunetix|havij|appscan)) {
+            return 444;
+        }
+
+        # Bloquer les requêtes avec des caractères suspects
+        if ($request_uri ~* "(\<|%3C).*script.*(\>|%3E)") {
+            return 444;
+        }
+
+        # Protection contre l'injection SQL
+        if ($args ~* "(\;|\||\`|\\|union|select|insert|drop|delete|update|cast|create|char|convert|alter|declare|exec|sp_)" ) {
+            return 444;
+        }
+
+        # ========================================================================
+        # GESTION DES ERREURS SÉCURISÉE
+        # ========================================================================
+
+        # Pages d'erreur personnalisées (sans révéler d'informations)
+        error_page 400 401 402 403 404 405 406 407 408 409 410 411 412 413 414 415 416 417 418 421 422 423 424 425 426 428 429 431 451 /error.html;
+        error_page 500 501 502 503 504 505 506 507 508 510 511 /error.html;
+
+        location = /error.html {
+            root /usr/share/nginx/html;
+            internal;
+        }
+
+        # ========================================================================
+        # ENDPOINTS TEMPORAIRES DE CORRECTION
+        # ========================================================================
+        
+        # Fallback pour les endpoints API manquants
+        location ~ ^/api/public/statistics/dashboard$ {
+            default_type application/json;
+            alias /usr/share/nginx/html/api/public/statistics/dashboard;
+            add_header Access-Control-Allow-Origin "*" always;
+            add_header Content-Type "application/json" always;
+        }
+        
+        location ~ ^/api/visits$ {
+            default_type application/json;
+            alias /usr/share/nginx/html/api/visits;
+            add_header Access-Control-Allow-Origin "*" always;
+            add_header Content-Type "application/json" always;
+        }
+        
+        # Endpoint de maintenance pour diagnostic
+        location = /api/status {
+            default_type application/json;
+            return 200 '{"status": "operational", "endpoints": {"dashboard": "fallback", "visits": "fallback"}, "timestamp": "$time_iso8601"}';
+            add_header Content-Type "application/json" always;
+        }
+    }
+}

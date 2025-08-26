@@ -1,0 +1,62 @@
+# DCOP (413) - Docker ignore file
+# Exclure les fichiers non nécessaires du contexte Docker
+
+# Répertoires de build et cache
+target/
+.cargo/
+node_modules/
+
+# Fichiers de configuration locale
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Fichiers temporaires
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# IDE et éditeurs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+README.md
+docs/
+*.md
+
+# Scripts de développement
+scripts/dev/
+scripts/test/
+
+# Certificats et clés (sécurité)
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Sauvegardes
+backup/
+*.backup
+*.dump
+
+# Tests
+coverage/
+test-results/
+
+# Données de développement
+data/
+uploads/

@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO users (id, username, password_hash, role, is_active, last_login, \n                             failed_login_attempts, locked_until, created_at, updated_at, integrity_hash)\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Varchar",
+        "Text",
+        {
+          "Custom": {
+            "name": "user_role",
+            "kind": {
+              "Enum": [
+                "admin",
+                "user",
+                "director"
+              ]
+            }
+          }
+        },
+        "Bool",
+        "Timestamptz",
+        "Int4",
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d54d34c77c9eefbca20c3c2fc27a9ea43d19235ef5f1ac199e620216d6e1f2ef"
+}

@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO visits (id, visitor_id, purpose, host_name, department, scheduled_start, \n                              scheduled_end, actual_start, actual_end, status, badge_number, notes,\n                              approved_by, approved_at, created_at, updated_at, integrity_hash)\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Varchar",
+        "Varchar",
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz",
+        {
+          "Custom": {
+            "name": "visit_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "approved",
+                "rejected",
+                "inprogress",
+                "completed",
+                "cancelled"
+              ]
+            }
+          }
+        },
+        "Varchar",
+        "Text",
+        "Uuid",
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "558d787a1f8d09e08ea9259ff7153b360179a35501407cab7a68f409cd99db40"
+}

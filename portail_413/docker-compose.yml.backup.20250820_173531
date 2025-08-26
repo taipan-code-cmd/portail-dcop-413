@@ -1,0 +1,172 @@
+# DCOP (413) - Docker Compose Configuration
+# Secrets Docker pour la gestion sécurisée des données sensibles
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+  encryption_key:
+    file: ./secrets/encryption_key.txt
+  security_salt:
+    file: ./secrets/security_salt.txt
+
+services:
+  # Base de données PostgreSQL sécurisée avec Alpine
+  postgres:
+    image: postgres:16-alpine
+    container_name: dcop_postgres_secure
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dcop_413
+      POSTGRES_USER: dcop_user
+      # Utilisation du secret Docker pour le mot de passe
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      # Authentification simplifiée pour le démarrage
+      POSTGRES_INITDB_ARGS: "--auth-host=md5 --auth-local=md5"
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Port dédié sans conflit (5433 = port alternatif standard PostgreSQL)
+    # SÉCURITÉ: Restriction de l'accès à localhost uniquement
+    ports:
+      - "127.0.0.1:5433:5432"
+    networks:
+      dcop_backend:
+        ipv4_address: 172.25.2.10
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dcop_user -d dcop_413"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+      - /var/run/postgresql:noexec,nosuid,size=100m
+
+  # Application DCOP (413) sécurisée
+  dcop_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dcop_app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Configuration de la base de données (utilise les secrets Docker)
+      # Note: postgres:5432 est correct car c'est le port interne du conteneur PostgreSQL
+      DATABASE_URL_TEMPLATE: postgresql://dcop_user:__PASSWORD__@postgres:5432/dcop_413
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      DB_MAX_CONNECTIONS: 10
+      DB_MIN_CONNECTIONS: 1
+      DB_CONNECT_TIMEOUT: 30
+      DB_IDLE_TIMEOUT: 600
+      # Configuration du serveur
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8443
+      # Configuration de sécurité - Variables d'environnement pour les secrets
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      ENCRYPTION_KEY_FILE: /run/secrets/encryption_key
+      SECURITY_SALT_FILE: /run/secrets/security_salt
+      SESSION_TIMEOUT: 3600
+      MAX_LOGIN_ATTEMPTS: 5
+      LOCKOUT_DURATION: 900
+      # Configuration des logs
+      LOG_LEVEL: info
+      RUST_LOG: portail_413=info,tower_http=info
+    # Utilisation des secrets Docker
+    secrets:
+      - postgres_password
+      - jwt_secret
+      - encryption_key
+      - security_salt
+    # SÉCURITÉ: AUCUN port exposé à l'extérieur - uniquement accessible via le proxy
+    networks:
+      dcop_backend:
+        ipv4_address: 172.25.2.20
+    volumes:
+      - app_logs:/app/logs:rw
+      - app_data:/app/data:rw
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate --quiet --tries=1 --spider http://nginx:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    read_only: false
+
+  # Nginx reverse proxy sécurisé avec TLS 1.3
+  nginx:
+    image: nginx:alpine
+    container_name: dcop_nginx
+    restart: unless-stopped
+    depends_on:
+      - dcop_app
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/proxy_params_secure.conf:/etc/nginx/proxy_params_secure.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx:rw
+      - nginx_cache:/var/cache/nginx:rw
+    networks:
+      dcop_backend:
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+      - /var/run:noexec,nosuid,size=100m
+    read_only: false
+
+volumes:
+  postgres_data:
+    driver: local
+  app_logs:
+    driver: local
+  app_data:
+    driver: local
+  nginx_logs:
+    driver: local
+  nginx_cache:
+    driver: local
+
+networks:
+  # Réseau backend - App, DB et Nginx avec API uniquement
+  dcop_backend:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.25.2.0/24
+          gateway: 172.25.2.1
+

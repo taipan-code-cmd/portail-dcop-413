@@ -1,0 +1,10 @@
+# DCOP (413) - Tâches automatiques
+# Sauvegarde quotidienne à 2h00
+0 2 * * * cd /home/taipan_51/portail_413/portail_413 && /home/taipan_51/portail_413/portail_413/backup-db.sh backup >> logs/backup.log 2>&1
+
+# Vérification de santé toutes les heures
+0 * * * * cd /home/taipan_51/portail_413/portail_413 && /home/taipan_51/portail_413/portail_413/health-check.sh >> logs/health.log 2>&1
+
+# Nettoyage des logs anciens tous les dimanches à 3h00
+0 3 * * 0 find /home/taipan_51/portail_413/portail_413/logs -name "*.log" -mtime +30 -delete
+

@@ -1,0 +1,106 @@
+services:
+  # Base de données PostgreSQL
+  database:
+    image: postgres:15-alpine
+    container_name: dcop-413-db
+    environment:
+      POSTGRES_DB: dcop_413
+      POSTGRES_USER: dcop_user
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./portail_413/migrations:/docker-entrypoint-initdb.d
+      - ./postgresql_ssl/server.crt:/var/lib/postgresql/ssl/server.crt:ro
+      - ./postgresql_ssl/server.key:/var/lib/postgresql/ssl/server.key:ro
+      - ./postgresql_ssl/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    ports:
+    restart: unless-stopped
+    secrets:
+      - postgres_password
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dcop_user -d dcop_413"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Backend Rust/Actix
+  backend:
+    build:
+      context: ./portail_413
+      dockerfile: Dockerfile
+    container_name: dcop-413-backend
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+      RUST_LOG: warn
+      JWT_SECRET_FILE: /run/secrets/jwt_secret
+      ENCRYPTION_KEY_FILE: /run/secrets/encryption_key
+      API_KEY_FILE: /run/secrets/api_key
+      SESSION_TIMEOUT: 900
+      JWT_EXPIRATION: 900
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+    secrets:
+      - jwt_secret
+      - postgres_password
+      - encryption_key
+      - api_key
+      - database_url
+    ports:
+    depends_on:
+      database:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - ./portail_413/uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Proxy inverse Nginx (optionnel, pour production)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./portail_413/nginx/nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./portail_413/nginx/security_headers.conf:/etc/nginx/security_headers.conf
+      - ./portail_413/nginx/csp_advanced.conf:/etc/nginx/csp_advanced.conf
+      - ./portail_413/nginx/ssl:/etc/nginx/ssl
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    name: dcop-413-network
+
+# 🔒 Secrets sécurisés Docker
+secrets:
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+    file: ./secrets/postgres_password.txt
+  encryption_key:
+    file: ./secrets/encryption_key.txt
+  api_key:
+    file: ./secrets/api_key.txt
+  database_url:
+    name: database_url
+
+  # Configuration SSL PostgreSQL
+  postgres-ssl-config:
+    image: postgres:15-alpine
+    volumes:
+      - ./postgresql_ssl.conf:/etc/postgresql/postgresql.conf
+    restart: "no"
+    profiles: ["ssl-config"]
+
+secrets:
+    file: ./secrets_secure/postgres_password.key

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT \n                DATE(created_at) as date,\n                COUNT(*) as visit_count\n            FROM visits \n            WHERE created_at >= $1\n            GROUP BY DATE(created_at)\n            ORDER BY date\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 1,
+        "name": "visit_count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "d261f6b226041c71d3dad67c300dc9f083ce254f8e57242785c992bed53285da"
+}

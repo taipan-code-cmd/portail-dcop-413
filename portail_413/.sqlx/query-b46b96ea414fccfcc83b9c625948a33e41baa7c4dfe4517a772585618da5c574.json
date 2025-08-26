@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO statistics (\n                id, metric_name, metric_type, category, value_int, \n                reference_date, description, unit, tags, created_at, updated_at, integrity_hash\n            ) VALUES \n            (gen_random_uuid(), 'active_visits_now', 'real_time', 'visits', $1, CURRENT_DATE, 'Visites actuellement en cours', 'count', '{\"visits\",\"real_time\",\"dashboard\"}', NOW(), NOW(), $5),\n            (gen_random_uuid(), 'total_visitors', 'cumulative', 'visitors', $2, CURRENT_DATE, 'Total des visiteurs uniques', 'count', '{\"visitors\",\"total\",\"dashboard\"}', NOW(), NOW(), $6),\n            (gen_random_uuid(), 'total_visits_today', 'daily', 'visits', $3, CURRENT_DATE, 'Visites créées aujourd''hui', 'count', '{\"visits\",\"daily\",\"dashboard\"}', NOW(), NOW(), $7),\n            (gen_random_uuid(), 'pending_approvals', 'real_time', 'visits', $4, CURRENT_DATE, 'Demandes d''approbation en attente', 'count', '{\"visits\",\"pending\",\"dashboard\"}', NOW(), NOW(), $8)\n            ON CONFLICT (metric_name, reference_date) \n            DO UPDATE SET \n                value_int = EXCLUDED.value_int,\n                updated_at = NOW(),\n                integrity_hash = EXCLUDED.integrity_hash",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b46b96ea414fccfcc83b9c625948a33e41baa7c4dfe4517a772585618da5c574"
+}

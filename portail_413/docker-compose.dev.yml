@@ -1,0 +1,142 @@
+# DCOP (413) - Docker Compose Configuration pour Développement
+# Cette configuration permet de développer avec hot-reload
+
+# Secrets Docker pour la gestion sécurisée des données sensibles
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  jwt_secret:
+    file: ./secrets/jwt_secret.txt
+  encryption_key:
+    file: ./secrets/encryption_key.txt
+  security_salt:
+    file: ./secrets/security_salt.txt
+
+services:
+  # Base de données PostgreSQL sécurisée avec Alpine
+  postgres:
+    image: postgres:16-alpine
+    container_name: dcop_postgres_secure
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dcop_413
+      POSTGRES_USER: dcop_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_INITDB_ARGS: "--auth-host=md5 --auth-local=md5"
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"
+    networks:
+      dcop_backend:
+        ipv4_address: 172.25.2.10
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dcop_user -d dcop_413"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Application DCOP (413) en mode développement avec Rust
+  dcop_app_dev:
+    image: rust:1.83-alpine
+    container_name: dcop_app_dev
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /app
+    command: >
+      sh -c "
+        apk add --no-cache musl-dev pkgconfig openssl-dev postgresql-dev curl &&
+        cargo install cargo-watch &&
+        cargo watch -x 'run --bin portail_413'
+      "
+    environment:
+      # Configuration de la base de données
+      DATABASE_URL: postgresql://dcop_user:dcop_secure_password_2024@postgres:5432/dcop_413
+      DB_MAX_CONNECTIONS: 10
+      DB_MIN_CONNECTIONS: 1
+      DB_CONNECT_TIMEOUT: 30
+      DB_IDLE_TIMEOUT: 600
+
+      # Configuration du serveur
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8443
+
+      # Configuration de sécurité - Variables d'environnement pour développement
+      JWT_SECRET: dev_jwt_secret_minimum_32_characters_long_for_development_only
+      ENCRYPTION_KEY: dev_encryption_key_exactly_32_chars
+      SECURITY_SALT: dev_salt_for_hashing_development_only_change_in_production
+      SESSION_TIMEOUT: 3600
+      MAX_LOGIN_ATTEMPTS: 5
+      LOCKOUT_DURATION: 900
+
+      # Configuration des logs
+      LOG_LEVEL: debug
+      RUST_LOG: portail_413=debug,tower_http=debug,sqlx=info
+
+    volumes:
+      # Monter le code source pour le développement
+      - ./src:/app/src:rw
+      - ./Cargo.toml:/app/Cargo.toml:ro
+      - ./Cargo.lock:/app/Cargo.lock:ro
+      - ./migrations:/app/migrations:ro
+      - ./sqlx-data.json:/app/sqlx-data.json:ro
+      # Cache Cargo pour accélérer les compilations
+      - cargo_cache:/usr/local/cargo/registry
+      - target_cache:/app/target
+
+    ports:
+      - "8443:8443"
+    networks:
+      dcop_backend:
+        ipv4_address: 172.25.2.21
+      # dcop_frontend:  # Frontend network disabled - no frontend components
+      #   ipv4_address: 172.25.1.21
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8443/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+# Réseaux sécurisés avec isolation
+networks:
+  dcop_backend:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.2.0/24
+          gateway: 172.25.2.1
+    driver_opts:
+      com.docker.network.bridge.name: dcop_backend
+      com.docker.network.bridge.enable_icc: "true"
+      com.docker.network.bridge.enable_ip_masquerade: "true"
+
+  # Frontend network disabled - no frontend components
+  # dcop_frontend:
+  #   driver: bridge
+  #   ipam:
+  #     config:
+  #       - subnet: 172.25.1.0/24
+  #         gateway: 172.25.1.1
+  #   driver_opts:
+  #     com.docker.network.bridge.name: dcop_frontend
+  #     com.docker.network.bridge.enable_icc: "true"
+  #     com.docker.network.bridge.enable_ip_masquerade: "true"
+
+# Volumes persistants sécurisés
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/postgres
+  cargo_cache:
+    driver: local
+  target_cache:
+    driver: local
