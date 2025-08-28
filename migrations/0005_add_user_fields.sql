@@ -1,6 +1,5 @@
 -- Migration pour ajouter les champs email, first_name, last_name à la table users
 -- Et modifier les rôles pour correspondre au frontend
-
 -- Ajouter les nouvelles colonnes
 ALTER TABLE users 
 ADD COLUMN IF NOT EXISTS email VARCHAR(255),
